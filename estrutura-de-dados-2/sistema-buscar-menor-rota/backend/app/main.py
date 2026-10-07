@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from .banco import carregar_grafo
 from .geo import mais_proximo
 from .grafo import Grafo
+from .indice_nomes import IndiceNomes
 from .modelos import MunicipioOut, PedidoRota, ResultadoBusca, RotaOut, TrechoOut
 from .nominatim import ClienteNominatim, NominatimIndisponivel
 from .planejamento import ErroPlanejamento, planejar
@@ -16,6 +17,7 @@ from .planejamento import ErroPlanejamento, planejar
 @asynccontextmanager
 async def ciclo_de_vida(app: FastAPI):
     app.state.grafo = carregar_grafo()
+    app.state.indice = IndiceNomes(app.state.grafo.municipios.values())
     app.state.nominatim = ClienteNominatim()
     yield
     await app.state.nominatim.fechar()
@@ -51,6 +53,18 @@ async def buscar(request: Request, q: Annotated[str, Query(max_length=200)]):
         )
         for lugar in lugares
     ]
+
+
+@app.get("/api/municipios", response_model=list[MunicipioOut])
+def sugerir_municipios(
+    request: Request,
+    q: Annotated[str, Query(max_length=100)],
+    limite: Annotated[int, Query(ge=1, le=20)] = 8,
+):
+    texto = q.strip()
+    if len(texto) < 2:
+        return []
+    return [MunicipioOut.de(m) for m in request.app.state.indice.buscar(texto, limite)]
 
 
 @app.get("/api/municipios/proximo", response_model=MunicipioOut)

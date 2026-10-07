@@ -2,7 +2,7 @@
 
 Calcula a **melhor rota** para visitar vários municípios brasileiros e voltar ao ponto de partida, usando **grafos**. Trabalho da disciplina **Estrutura de Dados II**.
 
-- Escolha os pontos **buscando pelo nome** (Nominatim/OpenStreetMap) ou **clicando no mapa**.
+- Escolha os pontos **digitando o nome** (sugestões de municípios enquanto digita; lugares que não são municípios via Nominatim/OpenStreetMap ao enviar) ou **clicando no mapa**.
 - O backend (Python) encontra a **melhor ordem de visita** e o **menor caminho** entre cada par de cidades, num grafo com os **5.571 municípios** do Brasil.
 - O front (React) desenha a rota no mapa.
 
@@ -23,7 +23,7 @@ Calcula a **melhor rota** para visitar vários municípios brasileiros e voltar 
 **Windows:** no instalador do Python, marque **"Add python.exe to PATH"**. Depois de instalar qualquer coisa, abra um terminal novo.
 **Linux (Debian/Ubuntu):** além do Python, instale o módulo venv: `sudo apt install python3-venv`.
 
-Internet é necessária na primeira execução (instalar dependências), para a busca por nome e para os mapas.
+Internet é necessária na primeira execução (instalar dependências), para a busca por lugares (Nominatim) e para os mapas.
 
 ---
 
@@ -105,6 +105,10 @@ Para **regerar o banco** (ex.: depois de mudar `construir_banco.py`), apague `ba
    - de **9 a 20 destinos**: **vizinho mais próximo** (vai sempre à cidade mais perto ainda não visitada) seguido de **2-opt** (inverte trechos da rota enquanto isso encurtar o total).
 4. Reconstrói o caminho de cada trecho com o vetor de **anteriores** do Dijkstra.
 
+### 3. Autocomplete de municípios (`GET /api/municipios`)
+
+Enquanto se digita, o front pede sugestões ao nosso backend, que as tira de um **índice em memória** (`app/indice_nomes.py`): duas listas ordenadas, uma com o nome normalizado de cada município (sem acentos, minúsculas) e outra com cada palavra dos nomes. Os nomes que **começam** com o texto e os que têm uma **palavra** começando com ele são achados por **busca binária** (`bisect`), em **O(log n + k)**; só se faltar resultado há uma varredura linear por nomes que **contêm** o texto. Uma UF no fim ("santa luzia pi") filtra o resultado. O front espera **500 ms** depois da última tecla (debounce) e descarta respostas de digitações antigas. Não usamos o Nominatim para isso porque a política dele **proíbe autocomplete**; ele só é consultado ao enviar a busca (botão Buscar ou Enter sem sugestão destacada), para lugares que não são municípios.
+
 ### Complexidades
 
 | Algoritmo | Complexidade | Onde |
@@ -116,6 +120,7 @@ Para **regerar o banco** (ex.: depois de mudar `construir_banco.py`), apague `ba
 | Vizinho mais próximo | O(n²) | `app/melhor_rota.py` |
 | 2-opt | O(n²) por passada | `app/melhor_rota.py` |
 | Município mais próximo | O(V) | `app/geo.py` |
+| Autocomplete (nome/palavra) | O(log n + k) por busca binária; O(n) só se faltar resultado | `app/indice_nomes.py` |
 
 V = 5.571 municípios, E ≈ 20 mil arestas, n = nº de destinos.
 
@@ -140,6 +145,7 @@ estrutura-de-dados-2/
 │       ├── modelos.py      schemas de entrada/saída
 │       ├── banco.py        SQLite
 │       ├── grafo.py        Municipio e Grafo (lista de adjacência)
+│       ├── indice_nomes.py índice ordenado + busca binária (autocomplete)
 │       ├── geo.py          haversine, município mais próximo
 │       ├── union_find.py   Union-Find
 │       ├── kruskal.py      árvore geradora mínima
@@ -170,6 +176,17 @@ estrutura-de-dados-2/
     "lat": -2.9147, "lon": -41.7662,
     "municipio": { "id": 2207702, "nome": "Parnaíba", "uf": "PI", "lat": -2.90585, "lon": -41.7754 }
   }
+]
+```
+
+### `GET /api/municipios?q=ter`
+
+Sugestões de municípios (ignora acentos e maiúsculas; UF opcional no fim, como em `q=santa luzia ma`). Parâmetro opcional `limite` (1 a 20, padrão 8). Com menos de 2 caracteres responde `[]`.
+
+```json
+[
+  { "id": 5008008, "nome": "Terenos", "uf": "MS", "lat": -20.4378, "lon": -54.8647 },
+  { "id": 2211001, "nome": "Teresina", "uf": "PI", "lat": -5.09194, "lon": -42.8034 }
 ]
 ```
 

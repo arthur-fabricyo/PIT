@@ -65,6 +65,10 @@ export function buscarLocal(texto: string): Promise<ResultadoBusca[]> {
   return requisitar(`/api/busca?q=${encodeURIComponent(texto)}`)
 }
 
+export function sugerirMunicipios(texto: string, sinal?: AbortSignal): Promise<Municipio[]> {
+  return requisitar(`/api/municipios?q=${encodeURIComponent(texto)}`, { signal: sinal })
+}
+
 export function municipioProximo(lat: number, lon: number): Promise<Municipio> {
   return requisitar(`/api/municipios/proximo?lat=${lat}&lon=${lon}`)
 }

@@ -292,3 +292,33 @@ button.secondary:hover {
     height: 500px;
   }
 }
+
+.sugestoes {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.sugestoes[hidden] {
+  display: none;
+}
+
+.sugestao {
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sugestao:hover,
+.sugestao.destacada {
+  background: #eaf2f8;
+}
+
+.sugestao.destacada {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
