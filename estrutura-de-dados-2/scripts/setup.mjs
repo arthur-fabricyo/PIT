@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, realpathSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -130,8 +130,12 @@ export async function prepararAmbiente() {
 }
 
 // Roda só quando chamado direto (npm run setup), não quando importado pelo dev.mjs.
-// No Windows a letra do drive pode vir em caixa diferente, então compara sem caixa.
-const normalizar = (caminho) => (WINDOWS ? path.resolve(caminho).toLowerCase() : path.resolve(caminho))
+// Resolve links simbólicos/junções (o Node já resolve em import.meta.url, mas não em argv[1]);
+// no Windows a letra do drive pode vir em caixa diferente, então compara sem caixa.
+const normalizar = (caminho) => {
+  const real = realpathSync(caminho)
+  return WINDOWS ? real.toLowerCase() : real
+}
 if (process.argv[1] && normalizar(process.argv[1]) === normalizar(fileURLToPath(import.meta.url))) {
   prepararAmbiente().then(() => ok('Ambiente pronto. Rode: npm run dev'), tratarErroFatal)
 }
