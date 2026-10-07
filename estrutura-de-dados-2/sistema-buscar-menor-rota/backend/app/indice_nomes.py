@@ -39,16 +39,20 @@ class IndiceNomes:
         """Até `limite` municípios: nome começa com o texto, depois alguma palavra, depois contém.
 
         Grupos 1 e 2: busca binária, O(log n + k). Grupo 3: varredura O(n), só se faltar resultado.
-        Um sufixo que seja UF ("santa luzia pi") filtra pela UF.
+        Se o último termo é uma UF ("santa luzia pi"), os resultados do texto inteiro vêm primeiro
+        (o usuário pode estar digitando "sao pa") e depois os do texto sem a UF, filtrados por ela.
         """
         tokens = normalizar(texto).split()
-        uf = None
-        if len(tokens) > 1 and tokens[-1].upper() in self._ufs:
-            uf = tokens.pop().upper()
-        prefixo = " ".join(tokens)
-        if not prefixo:
+        if not tokens:
             return []
+        resultado = self._buscar_grupos(" ".join(tokens), None, limite)
+        if len(tokens) > 1 and tokens[-1].upper() in self._ufs:
+            vistos = {m.id for m in resultado}
+            filtrados = self._buscar_grupos(" ".join(tokens[:-1]), tokens[-1].upper(), limite)
+            resultado += [m for m in filtrados if m.id not in vistos]
+        return resultado[:limite]
 
+    def _buscar_grupos(self, prefixo: str, uf: str | None, limite: int) -> list[Municipio]:
         def aceita(id_: int) -> bool:
             return uf is None or self._por_id[id_].uf == uf
 

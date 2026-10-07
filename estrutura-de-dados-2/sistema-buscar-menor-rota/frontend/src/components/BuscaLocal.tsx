@@ -19,7 +19,8 @@ export function BuscaLocal({ aoEscolher, aoErro }: Props) {
   const [texto, setTexto] = useState('')
   const [resultados, setResultados] = useState<ResultadoBusca[] | null>(null)
   const [buscando, setBuscando] = useState(false)
-  const [sugestoes, setSugestoes] = useState<Municipio[]>([])
+  // `consulta` é o texto que a lista respondeu; a lista só vale enquanto o texto não mudar
+  const [resposta, setResposta] = useState<{ consulta: string; lista: Municipio[] }>({ consulta: '', lista: [] })
   const [listaAberta, setListaAberta] = useState(false)
   const [destaque, setDestaque] = useState(-1)
 
@@ -31,7 +32,7 @@ export function BuscaLocal({ aoEscolher, aoErro }: Props) {
       sugerirMunicipios(consulta, controle.signal)
         .then((lista) => {
           if (controle.signal.aborted) return
-          setSugestoes(lista)
+          setResposta({ consulta, lista })
           setDestaque(-1)
         })
         .catch(() => {
@@ -44,7 +45,7 @@ export function BuscaLocal({ aoEscolher, aoErro }: Props) {
     }
   }, [texto])
 
-  const visiveis = listaAberta && texto.trim().length >= 2 ? sugestoes : []
+  const visiveis = listaAberta && resposta.consulta === texto.trim() ? resposta.lista : []
   const idDestacado = destaque >= 0 && destaque < visiveis.length ? `sugestao-${visiveis[destaque].id}` : undefined
 
   async function aoEnviar(evento: FormEvent<HTMLFormElement>) {
@@ -69,7 +70,7 @@ export function BuscaLocal({ aoEscolher, aoErro }: Props) {
 
   function limparBusca() {
     setResultados(null)
-    setSugestoes([])
+    setResposta({ consulta: '', lista: [] })
     setListaAberta(false)
     setDestaque(-1)
     setTexto('')
@@ -84,17 +85,14 @@ export function BuscaLocal({ aoEscolher, aoErro }: Props) {
     setTexto(valor)
     setResultados(null)
     setListaAberta(true)
+    setDestaque(-1)
   }
 
   function aoTeclar(evento: KeyboardEvent<HTMLInputElement>) {
     const total = visiveis.length
     if (evento.key === 'ArrowDown' || evento.key === 'ArrowUp') {
-      if (sugestoes.length === 0) return
+      if (total === 0) return
       evento.preventDefault()
-      if (!listaAberta) {
-        setListaAberta(true)
-        return
-      }
       const passo = evento.key === 'ArrowDown' ? 1 : -1
       setDestaque((atual) => (atual < 0 && passo < 0 ? total - 1 : (atual + passo + total) % total))
     } else if (evento.key === 'Enter' && idDestacado) {
