@@ -1,20 +1,5 @@
-# React + TypeScript + Vite
+# Frontend — Sistema de Rotas do Brasil
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite + ESLint. Veja o [README principal](../README.md) para preparar o ambiente e rodar tudo com `npm run dev` na pasta de cima.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Lint
-
-ESLint (flat config em `eslint.config.js`) com `typescript-eslint`, `eslint-plugin-react-hooks` e `eslint-plugin-react-refresh`:
-
-```bash
-npm run lint
-```
+Comandos locais: `npm run dev`, `npm run build`, `npm run lint`.
