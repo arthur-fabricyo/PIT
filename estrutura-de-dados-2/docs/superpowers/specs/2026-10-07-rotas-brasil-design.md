@@ -10,7 +10,7 @@ Transformar o "Sistema de Rotas do Piauí" num sistema que calcula a **melhor ro
 
 - Front em **React + TypeScript + ESLint** (Vite), componentizado, com mapa interativo.
 - Back em **Python (FastAPI)**: todo cálculo de rota sai do front e passa a ser feito no back.
-- Grafo com os **5.570 municípios**, persistido em **SQLite** local.
+- Grafo com os **5.571 municípios** (todos os do CSV, incluindo Boa Esperança do Norte/MT, criado em 2023), persistido em **SQLite** local.
 - Escolha de pontos **dinâmica**: busca por nome via **Nominatim** e clique no mapa.
 - O sistema **decide a melhor ordem de visita** e traça a rota no mapa.
 - **Um único comando** (`npm run dev`) prepara o ambiente e sobe back + front, em qualquer SO/shell.
@@ -64,7 +64,8 @@ estrutura-de-dados-2/
 │       ├── union_find.py      ← Union-Find (union by rank + path compression)
 │       ├── kruskal.py         ← árvore geradora mínima
 │       ├── dijkstra.py        ← Dijkstra com heapq
-│       ├── melhor_rota.py     ← força bruta / vizinho mais próximo + 2-opt
+│       ├── melhor_rota.py     ← força bruta / vizinho mais próximo + 2-opt (só a matriz)
+│       ├── planejamento.py    ← valida pedido, Dijkstra por ponto, matriz, trechos
 │       └── nominatim.py       ← cliente httpx com rate limit e cache
 └── frontend/                  ← Vite + React + TS + ESLint (já criado)
 ```
@@ -75,7 +76,7 @@ estrutura-de-dados-2/
 
 ### Fonte
 
-`kelvins/municipios-brasileiros` (MIT): `municipios.csv` (`codigo_ibge, nome, latitude, longitude, capital, codigo_uf, ...`, 5.570 linhas) e `estados.csv` (`codigo_uf, uf, nome, ...`). Os dois CSVs são versionados em `backend/data/` — a construção do banco não usa rede.
+`kelvins/municipios-brasileiros` (MIT): `municipios.csv` (`codigo_ibge, nome, latitude, longitude, capital, codigo_uf, ...`, 5.571 linhas) e `estados.csv` (`codigo_uf, uf, nome, ...`). Os dois CSVs são versionados em `backend/data/` — a construção do banco não usa rede.
 
 ### Schema SQLite (`backend/data/rotas.db`)
 
@@ -117,7 +118,7 @@ No startup, `main.py` lê as duas tabelas e monta o `Grafo` em memória (`dict[i
 | Peça | Implementação | Complexidade |
 |---|---|---|
 | Haversine | raio 6371 km | O(1) |
-| Município mais próximo | varredura linear nos 5.570 | O(V) |
+| Município mais próximo | varredura linear nos 5.571 | O(V) |
 | Union-Find | union by rank + path compression | ~O(α(n)) |
 | Kruskal | ordena candidatas + Union-Find | O(E log E) |
 | Dijkstra | `heapq`, lazy deletion, retorna `dist` e `anterior` | O((V+E) log V) |
@@ -184,7 +185,7 @@ Visual do HTML atual mantido (variáveis de cor, cabeçalho azul, painel de 380p
 ```
 src/
 ├── api/cliente.ts           ← buscarLocal, municipioProximo, calcularRota + tipos
-├── hooks/usePlanejador.ts   ← estado: origem, destinos, modo, resultado, erro, carregando
+├── hooks/usePlanejador.ts   ← estado (useReducer): origem, destinos, modo, resultado, erro, carregando
 ├── components/
 │   ├── Cabecalho.tsx
 │   ├── PainelPlanejamento.tsx
@@ -210,7 +211,7 @@ src/
 - Mapa inicia centrado no Brasil.
 - Erros da API exibem o `detail` do back; falha de rede exibe "Não foi possível falar com o servidor".
 
-Estado só com `useState`/`useCallback` no hook; sem bibliotecas de estado.
+Estado com `useReducer` no hook (cliques concorrentes no mapa não se sobrescrevem; resposta de cálculo para pontos que já mudaram é descartada); sem bibliotecas de estado.
 
 ## 7. Orquestração: `npm run dev` / `npm run setup`
 
@@ -253,7 +254,7 @@ Raiz: `package.json` com `"dev": "node scripts/dev.mjs"` e `"setup": "node scrip
 ## 9. Verificação (manual, sem testes automatizados)
 
 - `npm run lint` e `npm run build` no front sem erros.
-- `construir_banco.py`: 5.570 municípios, 1 componente.
+- `construir_banco.py`: 5.571 municípios, 1 componente.
 - `/docs` abre; `POST /api/rotas` com Teresina → [Parnaíba, Picos, Floriano] retorna rota coerente, começando e terminando em Teresina; cada erro da seção 5 retorna o status esperado.
 - Comparação de sanidade: com ≤ 8 destinos, `metodo = forca_bruta`; com 9+, `heuristica`.
 - Tela: busca por nome, clique no mapa, cálculo, desenho da rota, limpar, mensagens de erro.
