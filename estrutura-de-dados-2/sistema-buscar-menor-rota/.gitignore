@@ -1,0 +1,7 @@
+node_modules/
+dist/
+backend/.venv/
+backend/data/rotas.db
+backend/data/rotas.db.tmp
+__pycache__/
+*.pyc
