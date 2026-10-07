@@ -57,8 +57,9 @@ async function main() {
       }, 300)
     })
   }
-  process.on('SIGINT', () => encerrar(0))
-  process.on('SIGTERM', () => encerrar(0))
+  // SIGHUP: fechar o terminal (Linux/Mac); SIGBREAK: Ctrl+Break (Windows)
+  const sinais = ['SIGINT', 'SIGTERM', 'SIGHUP', ...(process.platform === 'win32' ? ['SIGBREAK'] : [])]
+  for (const sinal of sinais) process.on(sinal, () => encerrar(0))
 }
 
 main().catch(tratarErroFatal)
