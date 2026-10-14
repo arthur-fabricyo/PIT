@@ -117,6 +117,29 @@ Para **regerar o banco** (ex.: depois de mudar `construir_banco.py`), apague `ba
 
 Enquanto se digita, o front pede sugestões ao nosso backend, que as tira de um **índice em memória** (`app/indice_nomes.py`): duas listas ordenadas, uma com o nome normalizado de cada município (sem acentos, minúsculas) e outra com cada palavra dos nomes. Os nomes que **começam** com o texto e os que têm uma **palavra** começando com ele são achados por **busca binária** (`bisect`), em **O(log n + k)**; só se faltar resultado há uma varredura linear por nomes que **contêm** o texto. Uma UF no fim ("santa luzia ma") filtra por ela, mas os resultados do texto inteiro vêm antes (quem digita "sao pa" ainda quer São Paulo). O front espera **500 ms** depois da última tecla (debounce) e descarta respostas de digitações antigas. Não usamos o Nominatim para isso porque a política dele **proíbe autocomplete**; ele só é consultado ao enviar a busca (botão Buscar ou Enter sem sugestão destacada), para lugares que não são municípios.
 
+### 4. Traçado pelas estradas (só no mapa)
+
+O mapa desenha cada trecho seguindo as estradas reais. Como o grafo é fixo, a geometria de cada uma das ~20 mil arestas foi calculada **uma vez** com o [GraphHopper](https://github.com/graphhopper/graphhopper) sobre os dados do OpenStreetMap e guardada em `backend/data/geometrias_arestas.csv.gz` (polylines codificadas, ~3 MB). **99% das arestas** têm traçado; as que não têm são de municípios sem ligação por estrada (Fernando de Noronha, ribeirinhos da Amazônia, trechos do litoral do MA e do RN). Ao responder `POST /api/rotas`, o backend (`app/geometrias.py`) junta as geometrias das arestas do caminho de cada trecho, invertendo as que são percorridas no sentido contrário. Aresta sem geometria (ilha, acesso só por balsa ou arquivo ausente) é desenhada em linha reta.
+
+**O traçado é só visual:** o Dijkstra, a ordem de visita e as distâncias continuam usando o grafo.
+
+#### Regenerando as geometrias
+
+Só é preciso se o grafo mudar (por exemplo, depois de alterar `construir_banco.py`). Fora o download do mapa (2,1 GB), o import leva ~13 min e usa ~4 GB de memória, e a geração leva ~1,5 min. Precisa de **Java 17+**.
+
+```bash
+# numa pasta FORA do repositório
+curl -LO https://github.com/graphhopper/graphhopper/releases/download/11.1/graphhopper-web-11.1.jar
+curl -LO https://download.geofabrik.de/south-america/brazil-latest.osm.pbf     # ~2,1 GB
+java -Xmx6g -Ddw.graphhopper.datareader.file=brazil-latest.osm.pbf -jar graphhopper-web-11.1.jar import <repo>/backend/scripts/graphhopper.yml
+java -Xmx2g -Ddw.graphhopper.datareader.file=brazil-latest.osm.pbf -jar graphhopper-web-11.1.jar server <repo>/backend/scripts/graphhopper.yml
+
+# em outro terminal, na raiz do repositório (Linux/macOS: backend/.venv/bin/python)
+backend/.venv/Scripts/python backend/scripts/gerar_geometrias.py --refazer
+```
+
+Se o gerador for interrompido, rode de novo sem `--refazer`: ele continua de onde parou. `--workers N` muda quantas rotas são pedidas ao mesmo tempo (padrão 4).
+
 ### Complexidades
 
 | Algoritmo | Complexidade | Onde |
@@ -134,7 +157,7 @@ V = 5.571 municípios, E ≈ 20 mil arestas, n = nº de destinos.
 
 ### Limitação importante
 
-As distâncias são **aproximadas**: somam linhas retas entre municípios vizinhos, não quilômetros reais de estrada. A rota mostra uma boa ordem de visita e por quais regiões passar, mas não substitui um GPS.
+As distâncias são **aproximadas**: somam linhas retas entre municípios vizinhos, não quilômetros reais de estrada. O traçado no mapa segue as estradas, mas os km exibidos continuam sendo os do grafo. A rota mostra uma boa ordem de visita e por quais regiões passar, mas não substitui um GPS.
 
 ---
 
@@ -146,8 +169,10 @@ estrutura-de-dados-2/
 ├── scripts/                orquestração em Node (setup.mjs, dev.mjs, lib/)
 ├── backend/
 │   ├── requirements.txt
-│   ├── data/               CSVs dos municípios (+ rotas.db gerado)
-│   ├── scripts/construir_banco.py
+│   ├── requirements-dev.txt  pytest (só desenvolvimento)
+│   ├── data/               CSVs dos municípios, geometrias_arestas.csv.gz (+ rotas.db gerado)
+│   ├── scripts/            construir_banco.py, gerar_geometrias.py, graphhopper.yml
+│   ├── tests/              testes (pytest)
 │   └── app/                API FastAPI e algoritmos
 │       ├── main.py         endpoints
 │       ├── modelos.py      schemas de entrada/saída
@@ -155,6 +180,7 @@ estrutura-de-dados-2/
 │       ├── grafo.py        Municipio e Grafo (lista de adjacência)
 │       ├── indice_nomes.py índice ordenado + busca binária (autocomplete)
 │       ├── geo.py          haversine, município mais próximo
+│       ├── geometrias.py   traçado pelas estradas (polylines das arestas)
 │       ├── union_find.py   Union-Find
 │       ├── kruskal.py      árvore geradora mínima
 │       ├── dijkstra.py     menor caminho
@@ -218,10 +244,13 @@ Resposta (resumida):
   "metodo": "forca_bruta",
   "ordem": [ { "nome": "Teresina", ... }, { "nome": "Parnaíba", ... }, ..., { "nome": "Teresina", ... } ],
   "trechos": [
-    { "de": { ... }, "para": { ... }, "distancia_km": 281.9, "caminho": [ { ... }, { ... } ] }
+    { "de": { ... }, "para": { ... }, "distancia_km": 281.9, "caminho": [ { ... }, { ... } ],
+      "geometria": [ [-5.08921, -42.80165], [-5.08874, -42.80102], ... ] }
   ]
 }
 ```
+
+`geometria` é o traçado do trecho pelas estradas (`[lat, lon]`), só para o desenho; sem o arquivo de geometrias, ela liga os municípios do `caminho` em linha reta.
 
 Erros vêm como `{ "detail": "mensagem" }`:
 
@@ -247,6 +276,7 @@ Erros vêm como `{ "detail": "mensagem" }`:
 | "Não foi possível falar com o servidor." na tela | A API não está rodando. Veja as linhas `[api]` no terminal. |
 | Mapa cinza, sem imagens | Sem acesso a `tile.openstreetmap.org` (internet ou firewall). |
 | Banco parece desatualizado | Apague `backend/data/rotas.db` e rode `npm run dev`. |
+| Rota desenhada em linha reta, e o terminal `[api]` avisa "Geometrias não encontradas" ou "ilegíveis" | O arquivo `backend/data/geometrias_arestas.csv.gz` sumiu ou corrompeu. Restaure com `git checkout -- backend/data/geometrias_arestas.csv.gz`. |
 
 ---
 
@@ -254,3 +284,4 @@ Erros vêm como `{ "detail": "mensagem" }`:
 
 - Municípios: [kelvins/municipios-brasileiros](https://github.com/kelvins/municipios-brasileiros) (licença MIT), baseado em dados do IBGE.
 - Mapas e busca: © [contribuidores do OpenStreetMap](https://www.openstreetmap.org/copyright) (ODbL). Busca via [Nominatim](https://nominatim.org/), respeitando a [política de uso](https://operations.osmfoundation.org/policies/nominatim/) (máx. 1 requisição/s, sem autocomplete, com cache). Tiles conforme a [política de tiles](https://operations.osmfoundation.org/policies/tiles/).
+- Traçado das estradas: calculado com o [GraphHopper](https://github.com/graphhopper/graphhopper) (Apache 2.0) sobre dados © [contribuidores do OpenStreetMap](https://www.openstreetmap.org/copyright) (ODbL); extrato do Brasil da [Geofabrik](https://download.geofabrik.de/).
