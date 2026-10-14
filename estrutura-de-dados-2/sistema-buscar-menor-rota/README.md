@@ -44,7 +44,7 @@ Quando aparecer `[web] ... Local: http://127.0.0.1:5173/`, abra esse endereço. 
 | http://127.0.0.1:5173 | o sistema |
 | http://127.0.0.1:8000/docs | documentação interativa da API |
 
-Para só preparar o ambiente, sem subir os servidores: `npm run setup`.
+Para só preparar o ambiente, sem subir os servidores: `npm run setup`. Para regenerar o traçado das rotas pelas estradas (raramente necessário): `npm run geometrias` (veja [Regenerando as geometrias](#regenerando-as-geometrias)).
 
 ### O que o `npm run dev` faz por você
 
@@ -65,6 +65,7 @@ Para só preparar o ambiente, sem subir os servidores: `npm run setup`.
 | `PYTHON` | caminho do Python a usar, se ele não estiver no PATH |
 | `API_PORT` | porta inicial da API (padrão 8000) |
 | `NOMINATIM_EMAIL` | e-mail de contato enviado ao Nominatim (recomendado pela política de uso) |
+| `JAVA` | caminho de um Java 17+ para o `npm run geometrias` (senão ele procura um ou baixa um portátil) |
 
 Exemplo (PowerShell): `$env:API_PORT = "9000"; npm run dev` · (bash): `API_PORT=9000 npm run dev`
 
@@ -125,20 +126,30 @@ O mapa desenha cada trecho seguindo as estradas reais. Como o grafo é fixo, a g
 
 #### Regenerando as geometrias
 
-Só é preciso se o grafo mudar (por exemplo, depois de alterar `construir_banco.py`). Fora o download do mapa (2,1 GB), o import leva ~13 min e usa ~4 GB de memória, e a geração leva ~1,5 min. Precisa de **Java 17+**.
+O arquivo já vem pronto no repositório; só é preciso regenerar se o grafo mudar (por exemplo, depois de alterar `construir_banco.py`). Tudo é feito por **um comando**, na pasta `estrutura-de-dados-2`:
 
 ```bash
-# numa pasta FORA do repositório
-curl -LO https://github.com/graphhopper/graphhopper/releases/download/11.1/graphhopper-web-11.1.jar
-curl -LO https://download.geofabrik.de/south-america/brazil-latest.osm.pbf     # ~2,1 GB
-java -Xmx6g -Ddw.graphhopper.datareader.file=brazil-latest.osm.pbf -jar graphhopper-web-11.1.jar import <repo>/backend/scripts/graphhopper.yml
-java -Xmx2g -Ddw.graphhopper.datareader.file=brazil-latest.osm.pbf -jar graphhopper-web-11.1.jar server <repo>/backend/scripts/graphhopper.yml
-
-# em outro terminal, na raiz do repositório (Linux/macOS: backend/.venv/bin/python)
-backend/.venv/Scripts/python backend/scripts/gerar_geometrias.py --refazer
+npm run geometrias -- --refazer     # depois de mudar o grafo: gera tudo de novo
+npm run geometrias                  # completa o que falta (ex.: depois de uma interrupção)
 ```
 
-Se o gerador for interrompido, rode de novo sem `--refazer`: ele continua de onde parou. `--workers N` muda quantas rotas são pedidas ao mesmo tempo (padrão 4).
+O que ele faz:
+
+1. Prepara o ambiente como o `npm run setup` (venv, dependências, `rotas.db`).
+2. Procura um **Java 17+** (variável `JAVA`, o JDK do cache ou o `java` do PATH). Se não achar, baixa um **JDK 21 portátil** só para o cache, sem instalar nada no sistema.
+3. Baixa o **GraphHopper 11.1** (`.jar`) e o **mapa do Brasil** da Geofabrik (~2,1 GB). Arquivos já baixados não são baixados de novo, e um download interrompido continua de onde parou.
+4. Importa o mapa no GraphHopper com `backend/scripts/graphhopper.yml`, **só se** o mapa ou a configuração mudaram desde o último import.
+5. Sobe o servidor do GraphHopper (porta 8989), roda `backend/scripts/gerar_geometrias.py` e **derruba o servidor no final**, também no Ctrl+C ou se algo falhar.
+
+Tudo que é baixado fica em `.cache/graphhopper/` (fora do Git, ~4 GB). Apague essa pasta para liberar espaço ou para baixar um mapa mais novo.
+
+| Etapa | Primeira vez | Próximas vezes |
+|---|---|---|
+| Downloads (JDK, GraphHopper, mapa) | depende da internet (~2,3 GB) | — |
+| Import do mapa | ~13 min, ~4 GB de RAM | — (só se o mapa ou o `graphhopper.yml` mudarem) |
+| Geração das ~20 mil geometrias | ~1,5 min | ~1,5 min |
+
+Argumentos depois de `--` vão para o gerador: `--refazer` (ignora o arquivo atual e gera tudo de novo), `--workers N` (rotas pedidas ao mesmo tempo, padrão 4) e `--limite N` (só as N primeiras que faltam, para testar). Depois de gerar, reinicie o `npm run dev` para a API carregar o arquivo novo.
 
 ### Complexidades
 
@@ -165,8 +176,9 @@ As distâncias são **aproximadas**: somam linhas retas entre municípios vizinh
 
 ```
 estrutura-de-dados-2/
-├── package.json            scripts "dev" e "setup" (sem dependências)
-├── scripts/                orquestração em Node (setup.mjs, dev.mjs, lib/)
+├── package.json            scripts "dev", "setup" e "geometrias" (sem dependências)
+├── scripts/                orquestração em Node (setup.mjs, dev.mjs, geometrias.mjs, lib/)
+├── .cache/graphhopper/     downloads do npm run geometrias (fora do Git)
 ├── backend/
 │   ├── requirements.txt
 │   ├── requirements-dev.txt  pytest (só desenvolvimento)
@@ -277,6 +289,8 @@ Erros vêm como `{ "detail": "mensagem" }`:
 | Mapa cinza, sem imagens | Sem acesso a `tile.openstreetmap.org` (internet ou firewall). |
 | Banco parece desatualizado | Apague `backend/data/rotas.db` e rode `npm run dev`. |
 | Rota desenhada em linha reta, e o terminal `[api]` avisa "Geometrias não encontradas" ou "ilegíveis" | O arquivo `backend/data/geometrias_arestas.csv.gz` sumiu ou corrompeu. Restaure com `git checkout -- backend/data/geometrias_arestas.csv.gz`. |
+| `npm run geometrias`: `✖ O import do GraphHopper falhou` com `OutOfMemoryError` | O import precisa de ~4 GB de RAM livre. Feche outros programas (inclusive o `npm run dev`) e rode de novo. |
+| `npm run geometrias`: `✖ A porta 8989 já está em uso` | Ficou um GraphHopper aberto de uma execução anterior. Feche o processo `java` e rode de novo. |
 
 ---
 
