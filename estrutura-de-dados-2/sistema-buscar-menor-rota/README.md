@@ -82,6 +82,14 @@ npm run dev
 npm run lint     # ESLint
 ```
 
+Testes do backend (pytest, só para desenvolvimento):
+
+```bash
+cd backend
+.venv/Scripts/python -m pip install -r requirements-dev.txt   # Windows (Linux/macOS: .venv/bin/python)
+.venv/Scripts/python -m pytest
+```
+
 Para **regerar o banco** (ex.: depois de mudar `construir_banco.py`), apague `backend/data/rotas.db` e rode `npm run dev`.
 
 ---

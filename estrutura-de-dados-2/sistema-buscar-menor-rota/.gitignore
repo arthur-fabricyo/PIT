@@ -5,3 +5,5 @@ backend/data/rotas.db
 backend/data/rotas.db.tmp
 __pycache__/
 *.pyc
+.pytest_cache/
+backend/data/geometrias_arestas.csv.tmp
