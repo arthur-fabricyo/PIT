@@ -123,3 +123,25 @@ def test_carregar_arquivo_sem_as_colunas_esperadas(tmp_path):
     with gzip.open(arquivo, "wt", encoding="utf-8", newline="") as saida:
         saida.write("a,b\n1,2\n")
     assert carregar_geometrias(arquivo) == {}
+
+
+def test_carregar_arquivo_com_miolo_corrompido(tmp_path):
+    arquivo = tmp_path / "geo.csv.gz"
+    gravar_csv_gz(arquivo, [[i, i + 1, codificar([(-5.0 - i / 1000, -42.0), (-5.2, -41.5 + i / 997)])] for i in range(500)])
+    bruto = bytearray(arquivo.read_bytes())
+    meio = len(bruto) // 2
+    bruto[meio : meio + 8] = b"\xff" * 8
+    arquivo.write_bytes(bytes(bruto))
+    assert carregar_geometrias(arquivo) == {}
+
+
+def test_carregar_arquivo_com_linha_curta(tmp_path):
+    arquivo = tmp_path / "geo.csv.gz"
+    with gzip.open(arquivo, "wt", encoding="utf-8", newline="") as saida:
+        saida.write("origem_id,destino_id,polyline\n1\n")
+    assert carregar_geometrias(arquivo) == {}
+
+
+def test_polyline_truncada_vira_linha_reta(grafo):
+    geometrias = {(1, 2): codificar(ESTRADA_1_2)[:-1]}
+    assert geometria_do_caminho([1, 2], geometrias, grafo) == [(-5.0, -42.0), (-5.0, -41.0)]

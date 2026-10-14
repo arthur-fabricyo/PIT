@@ -8,6 +8,7 @@ para o desenho no mapa: o Dijkstra e as distâncias continuam usando o grafo.
 import csv
 import gzip
 import logging
+import zlib
 from pathlib import Path
 
 from .grafo import Grafo
@@ -76,7 +77,7 @@ def carregar_geometrias(caminho: Path = CAMINHO_PADRAO) -> Geometrias:
             for linha in csv.DictReader(arquivo):
                 if linha["polyline"]:
                     geometrias[(int(linha["origem_id"]), int(linha["destino_id"]))] = linha["polyline"]
-    except (OSError, EOFError, csv.Error, KeyError, ValueError) as erro:
+    except (OSError, EOFError, zlib.error, csv.Error, KeyError, ValueError) as erro:
         log.warning("Geometrias ilegíveis em %s (%s); as rotas serão desenhadas em linha reta.", caminho, erro)
         return {}
     return geometrias
@@ -94,12 +95,14 @@ def geometria_do_caminho(caminho: list[int], geometrias: Geometrias, grafo: Graf
     pontos: list[Ponto] = []
     for a, b in zip(caminho, caminho[1:]):
         polyline = geometrias.get((min(a, b), max(a, b)))
-        if polyline is None:
+        try:
+            trecho = decodificar(polyline) if polyline is not None else []
+        except IndexError:  # polyline cortada: melhor a linha reta que um erro na rota
+            trecho = []
+        if not trecho:
             trecho = [_ponto(grafo, a), _ponto(grafo, b)]
-        else:
-            trecho = decodificar(polyline)
-            if a > b:  # gravada de min para max; aqui é percorrida ao contrário
-                trecho.reverse()
+        elif a > b:  # gravada de min para max; aqui é percorrida ao contrário
+            trecho.reverse()
         if pontos and trecho and pontos[-1] == trecho[0]:
             trecho = trecho[1:]
         pontos.extend(trecho)
