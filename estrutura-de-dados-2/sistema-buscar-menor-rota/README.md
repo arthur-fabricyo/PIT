@@ -44,7 +44,7 @@ Quando aparecer `[web] ... Local: http://127.0.0.1:5173/`, abra esse endereço. 
 | http://127.0.0.1:5173 | o sistema |
 | http://127.0.0.1:8000/docs | documentação interativa da API |
 
-Para só preparar o ambiente, sem subir os servidores: `npm run setup`.
+Para só preparar o ambiente, sem subir os servidores: `npm run setup`. Para regenerar o traçado das rotas pelas estradas (raramente necessário): `npm run geometrias` (veja [Regenerando as geometrias](#regenerando-as-geometrias)).
 
 ### O que o `npm run dev` faz por você
 
@@ -65,6 +65,7 @@ Para só preparar o ambiente, sem subir os servidores: `npm run setup`.
 | `PYTHON` | caminho do Python a usar, se ele não estiver no PATH |
 | `API_PORT` | porta inicial da API (padrão 8000) |
 | `NOMINATIM_EMAIL` | e-mail de contato enviado ao Nominatim (recomendado pela política de uso) |
+| `JAVA` | caminho de um Java 17+ para o `npm run geometrias` (senão ele procura um ou baixa um portátil) |
 
 Exemplo (PowerShell): `$env:API_PORT = "9000"; npm run dev` · (bash): `API_PORT=9000 npm run dev`
 
@@ -80,6 +81,14 @@ cd backend
 cd frontend
 npm run dev
 npm run lint     # ESLint
+```
+
+Testes do backend (pytest, só para desenvolvimento):
+
+```bash
+cd backend
+.venv/Scripts/python -m pip install -r requirements-dev.txt   # Windows (Linux/macOS: .venv/bin/python)
+.venv/Scripts/python -m pytest
 ```
 
 Para **regerar o banco** (ex.: depois de mudar `construir_banco.py`), apague `backend/data/rotas.db` e rode `npm run dev`.
@@ -109,6 +118,39 @@ Para **regerar o banco** (ex.: depois de mudar `construir_banco.py`), apague `ba
 
 Enquanto se digita, o front pede sugestões ao nosso backend, que as tira de um **índice em memória** (`app/indice_nomes.py`): duas listas ordenadas, uma com o nome normalizado de cada município (sem acentos, minúsculas) e outra com cada palavra dos nomes. Os nomes que **começam** com o texto e os que têm uma **palavra** começando com ele são achados por **busca binária** (`bisect`), em **O(log n + k)**; só se faltar resultado há uma varredura linear por nomes que **contêm** o texto. Uma UF no fim ("santa luzia ma") filtra por ela, mas os resultados do texto inteiro vêm antes (quem digita "sao pa" ainda quer São Paulo). O front espera **500 ms** depois da última tecla (debounce) e descarta respostas de digitações antigas. Não usamos o Nominatim para isso porque a política dele **proíbe autocomplete**; ele só é consultado ao enviar a busca (botão Buscar ou Enter sem sugestão destacada), para lugares que não são municípios.
 
+### 4. Traçado pelas estradas (só no mapa)
+
+O mapa desenha cada trecho seguindo as estradas reais. Como o grafo é fixo, a geometria de cada uma das ~20 mil arestas foi calculada **uma vez** com o [GraphHopper](https://github.com/graphhopper/graphhopper) sobre os dados do OpenStreetMap e guardada em `backend/data/geometrias_arestas.csv.gz` (polylines codificadas, ~3 MB). **99% das arestas** têm traçado; as que não têm são de municípios sem ligação por estrada (Fernando de Noronha, ribeirinhos da Amazônia, trechos do litoral do MA e do RN). Ao responder `POST /api/rotas`, o backend (`app/geometrias.py`) junta as geometrias das arestas do caminho de cada trecho, invertendo as que são percorridas no sentido contrário. Aresta sem geometria (ilha, acesso só por balsa ou arquivo ausente) é desenhada em linha reta.
+
+**O traçado é só visual:** o Dijkstra, a ordem de visita e as distâncias continuam usando o grafo.
+
+#### Regenerando as geometrias
+
+O arquivo já vem pronto no repositório; só é preciso regenerar se o grafo mudar (por exemplo, depois de alterar `construir_banco.py`). Tudo é feito por **um comando**, na pasta `estrutura-de-dados-2`:
+
+```bash
+npm run geometrias -- --refazer     # depois de mudar o grafo: gera tudo de novo
+npm run geometrias                  # completa o que falta (ex.: depois de uma interrupção)
+```
+
+O que ele faz:
+
+1. Prepara o ambiente como o `npm run setup` (venv, dependências, `rotas.db`).
+2. Procura um **Java 17+** (variável `JAVA`, o JDK do cache ou o `java` do PATH). Se não achar, baixa um **JDK 21 portátil** só para o cache, sem instalar nada no sistema.
+3. Baixa o **GraphHopper 11.1** (`.jar`) e o **mapa do Brasil** da Geofabrik (~2,1 GB). Arquivos já baixados não são baixados de novo, e um download interrompido continua de onde parou.
+4. Importa o mapa no GraphHopper com `backend/scripts/graphhopper.yml`, **só se** o mapa ou a configuração mudaram desde o último import.
+5. Sobe o servidor do GraphHopper (porta 8989), roda `backend/scripts/gerar_geometrias.py` e **derruba o servidor no final**, também no Ctrl+C ou se algo falhar.
+
+Tudo que é baixado fica em `.cache/graphhopper/` (fora do Git, ~4 GB). Apague essa pasta para liberar espaço ou para baixar um mapa mais novo.
+
+| Etapa | Primeira vez | Próximas vezes |
+|---|---|---|
+| Downloads (JDK, GraphHopper, mapa) | depende da internet (~2,3 GB) | — |
+| Import do mapa | ~13 min, ~4 GB de RAM | — (só se o mapa ou o `graphhopper.yml` mudarem) |
+| Geração das ~20 mil geometrias | ~1,5 min | ~1,5 min |
+
+Argumentos depois de `--` vão para o gerador: `--refazer` (ignora o arquivo atual e gera tudo de novo), `--workers N` (rotas pedidas ao mesmo tempo, padrão 4) e `--limite N` (só as N primeiras que faltam, para testar). Depois de gerar, reinicie o `npm run dev` para a API carregar o arquivo novo.
+
 ### Complexidades
 
 | Algoritmo | Complexidade | Onde |
@@ -126,7 +168,7 @@ V = 5.571 municípios, E ≈ 20 mil arestas, n = nº de destinos.
 
 ### Limitação importante
 
-As distâncias são **aproximadas**: somam linhas retas entre municípios vizinhos, não quilômetros reais de estrada. A rota mostra uma boa ordem de visita e por quais regiões passar, mas não substitui um GPS.
+As distâncias são **aproximadas**: somam linhas retas entre municípios vizinhos, não quilômetros reais de estrada. O traçado no mapa segue as estradas, mas os km exibidos continuam sendo os do grafo. A rota mostra uma boa ordem de visita e por quais regiões passar, mas não substitui um GPS.
 
 ---
 
@@ -134,12 +176,15 @@ As distâncias são **aproximadas**: somam linhas retas entre municípios vizinh
 
 ```
 estrutura-de-dados-2/
-├── package.json            scripts "dev" e "setup" (sem dependências)
-├── scripts/                orquestração em Node (setup.mjs, dev.mjs, lib/)
+├── package.json            scripts "dev", "setup" e "geometrias" (sem dependências)
+├── scripts/                orquestração em Node (setup.mjs, dev.mjs, geometrias.mjs, lib/)
+├── .cache/graphhopper/     downloads do npm run geometrias (fora do Git)
 ├── backend/
 │   ├── requirements.txt
-│   ├── data/               CSVs dos municípios (+ rotas.db gerado)
-│   ├── scripts/construir_banco.py
+│   ├── requirements-dev.txt  pytest (só desenvolvimento)
+│   ├── data/               CSVs dos municípios, geometrias_arestas.csv.gz (+ rotas.db gerado)
+│   ├── scripts/            construir_banco.py, gerar_geometrias.py, graphhopper.yml
+│   ├── tests/              testes (pytest)
 │   └── app/                API FastAPI e algoritmos
 │       ├── main.py         endpoints
 │       ├── modelos.py      schemas de entrada/saída
@@ -147,6 +192,7 @@ estrutura-de-dados-2/
 │       ├── grafo.py        Municipio e Grafo (lista de adjacência)
 │       ├── indice_nomes.py índice ordenado + busca binária (autocomplete)
 │       ├── geo.py          haversine, município mais próximo
+│       ├── geometrias.py   traçado pelas estradas (polylines das arestas)
 │       ├── union_find.py   Union-Find
 │       ├── kruskal.py      árvore geradora mínima
 │       ├── dijkstra.py     menor caminho
@@ -210,10 +256,13 @@ Resposta (resumida):
   "metodo": "forca_bruta",
   "ordem": [ { "nome": "Teresina", ... }, { "nome": "Parnaíba", ... }, ..., { "nome": "Teresina", ... } ],
   "trechos": [
-    { "de": { ... }, "para": { ... }, "distancia_km": 281.9, "caminho": [ { ... }, { ... } ] }
+    { "de": { ... }, "para": { ... }, "distancia_km": 281.9, "caminho": [ { ... }, { ... } ],
+      "geometria": [ [-5.08921, -42.80165], [-5.08874, -42.80102], ... ] }
   ]
 }
 ```
+
+`geometria` é o traçado do trecho pelas estradas (`[lat, lon]`), só para o desenho; sem o arquivo de geometrias, ela liga os municípios do `caminho` em linha reta.
 
 Erros vêm como `{ "detail": "mensagem" }`:
 
@@ -239,6 +288,9 @@ Erros vêm como `{ "detail": "mensagem" }`:
 | "Não foi possível falar com o servidor." na tela | A API não está rodando. Veja as linhas `[api]` no terminal. |
 | Mapa cinza, sem imagens | Sem acesso a `tile.openstreetmap.org` (internet ou firewall). |
 | Banco parece desatualizado | Apague `backend/data/rotas.db` e rode `npm run dev`. |
+| Rota desenhada em linha reta, e o terminal `[api]` avisa "Geometrias não encontradas" ou "ilegíveis" | O arquivo `backend/data/geometrias_arestas.csv.gz` sumiu ou corrompeu. Restaure com `git checkout -- backend/data/geometrias_arestas.csv.gz`. |
+| `npm run geometrias`: `✖ O import do GraphHopper falhou` com `OutOfMemoryError` | O import precisa de ~4 GB de RAM livre. Feche outros programas (inclusive o `npm run dev`) e rode de novo. |
+| `npm run geometrias`: `✖ A porta 8989 já está em uso` | Ficou um GraphHopper aberto de uma execução anterior. Feche o processo `java` e rode de novo. |
 
 ---
 
@@ -246,3 +298,4 @@ Erros vêm como `{ "detail": "mensagem" }`:
 
 - Municípios: [kelvins/municipios-brasileiros](https://github.com/kelvins/municipios-brasileiros) (licença MIT), baseado em dados do IBGE.
 - Mapas e busca: © [contribuidores do OpenStreetMap](https://www.openstreetmap.org/copyright) (ODbL). Busca via [Nominatim](https://nominatim.org/), respeitando a [política de uso](https://operations.osmfoundation.org/policies/nominatim/) (máx. 1 requisição/s, sem autocomplete, com cache). Tiles conforme a [política de tiles](https://operations.osmfoundation.org/policies/tiles/).
+- Traçado das estradas: calculado com o [GraphHopper](https://github.com/graphhopper/graphhopper) (Apache 2.0) sobre dados © [contribuidores do OpenStreetMap](https://www.openstreetmap.org/copyright) (ODbL); extrato do Brasil da [Geofabrik](https://download.geofabrik.de/).

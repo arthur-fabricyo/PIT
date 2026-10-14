@@ -38,6 +38,7 @@ class TrechoOut(BaseModel):
     para: MunicipioOut
     distancia_km: float
     caminho: list[MunicipioOut]
+    geometria: list[tuple[float, float]]  # [lat, lon] pelas estradas; só para o desenho
 
 
 class RotaOut(BaseModel):

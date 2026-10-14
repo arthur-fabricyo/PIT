@@ -82,7 +82,7 @@ export function encerrarArvore(filho) {
   }
 }
 
-function portaLivre(porta) {
+export function portaLivre(porta) {
   return new Promise((resolve) => {
     const servidor = net.createServer()
     servidor.once('error', () => resolve(false))
