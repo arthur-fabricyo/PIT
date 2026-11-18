@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 
 from .banco import carregar_grafo
 from .geo import mais_proximo
+from .geometrias import carregar_geometrias, geometria_do_caminho
 from .grafo import Grafo
 from .indice_nomes import IndiceNomes
 from .modelos import MunicipioOut, PedidoRota, ResultadoBusca, RotaOut, TrechoOut
@@ -17,6 +18,7 @@ from .planejamento import ErroPlanejamento, planejar
 @asynccontextmanager
 async def ciclo_de_vida(app: FastAPI):
     app.state.grafo = carregar_grafo()
+    app.state.geometrias = carregar_geometrias()
     app.state.indice = IndiceNomes(app.state.grafo.municipios.values())
     app.state.nominatim = ClienteNominatim()
     yield
@@ -79,6 +81,7 @@ def municipio_proximo(
 @app.post("/api/rotas", response_model=RotaOut)
 def calcular_rota(request: Request, pedido: PedidoRota):
     grafo = _grafo(request)
+    geometrias = request.app.state.geometrias
     try:
         plano = planejar(grafo, pedido.origem_id, pedido.destinos_ids)
     except ErroPlanejamento as erro:
@@ -97,6 +100,7 @@ def calcular_rota(request: Request, pedido: PedidoRota):
                 para=municipio(t.para),
                 distancia_km=t.distancia_km,
                 caminho=[municipio(i) for i in t.caminho],
+                geometria=geometria_do_caminho(t.caminho, geometrias, grafo),
             )
             for t in plano.trechos
         ],

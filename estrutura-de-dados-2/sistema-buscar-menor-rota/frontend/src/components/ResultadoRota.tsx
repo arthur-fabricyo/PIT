@@ -36,7 +36,9 @@ export function ResultadoRota({ rota }: { rota: Rota }) {
         ))}
       </ol>
       <p className="hint success">A rota retorna automaticamente ao município de origem.</p>
-      <p className="hint">Distâncias aproximadas (linha reta entre municípios vizinhos).</p>
+      <p className="hint">
+        O traçado segue as estradas, mas as distâncias são aproximadas (linha reta entre municípios vizinhos).
+      </p>
     </div>
   )
 }

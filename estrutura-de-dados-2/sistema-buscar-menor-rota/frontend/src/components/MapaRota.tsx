@@ -35,10 +35,7 @@ function EnquadrarRota({ linha }: { linha: LatLngTuple[] }) {
 
 // CircleMarker (vetorial) evita o problema dos ícones PNG do Leaflet com bundlers.
 export function MapaRota({ origem, destinos, rota, aoClicar }: Props) {
-  const linha = useMemo<LatLngTuple[]>(
-    () => (rota ? rota.trechos.flatMap((t) => t.caminho.map((m): LatLngTuple => [m.lat, m.lon])) : []),
-    [rota],
-  )
+  const linha = useMemo<LatLngTuple[]>(() => (rota ? rota.trechos.flatMap((t) => t.geometria) : []), [rota])
   const posicaoNaRota = useMemo(() => {
     const posicoes = new Map<number, number>()
     rota?.ordem.slice(1, -1).forEach((m, i) => posicoes.set(m.id, i + 1))

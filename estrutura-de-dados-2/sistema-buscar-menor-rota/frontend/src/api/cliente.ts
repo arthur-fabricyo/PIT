@@ -18,6 +18,7 @@ export interface Trecho {
   para: Municipio
   distancia_km: number
   caminho: Municipio[]
+  geometria: [number, number][] // [lat, lon] pelas estradas; só para o desenho
 }
 
 export interface Rota {
